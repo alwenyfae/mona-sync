@@ -98,9 +98,9 @@
                     }
 
                     data.forEach((test) => {
-                        // Convert Unix timestamp (seconds) to readable string
+                        // Convert Unix timestamp (milliseconds) to readable string
                         const updatedDate = new Date(
-                            test.updatedAt * 1000,
+                            test.updatedAt,
                         ).toLocaleString();
                         const statusText = test.isDeleted
                             ? '<span class="deleted">Deleted</span>'
