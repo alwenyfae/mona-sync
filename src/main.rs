@@ -207,6 +207,7 @@ async fn main() {
         .unwrap();
 
     let app = Router::new()
+        .route("/", get(|| async { Html(include_str!("../index.html")) }))
         .route("/health", get(|| async { "Sync API is alive!" }))
         .route(
             "/api/sync/supply_items",
