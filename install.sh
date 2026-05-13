@@ -9,6 +9,15 @@ REPO_URL="https://github.com/alwenyfae/mona-sync.git"
 INSTALL_DIR="/opt/mona-sync"
 SERVICE_NAME="mona-sync"
 DEFAULT_PORT="3000"
+BRANCH="main"
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -b|--branch) BRANCH="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -55,7 +64,7 @@ case "$OS" in
         elif [[ "$OS_LIKE" == *"arch"* ]]; then
             pacman -Sy --noconfirm git curl base-devel sqlite
         else
-            echo -e "${RED}❌ Unsupported distribution: $OS${NC}"
+            echo -e "${RED} Unsupported distribution: $OS${NC}"
             echo -e "Please install dependencies manually: git, curl, build tools, sqlite3, and sqlite-dev headers."
             exit 1
         fi
@@ -73,12 +82,14 @@ else
 fi
 
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${BLUE} Directory $INSTALL_DIR already exists. Updating...${NC}"
+    echo -e "${BLUE} Directory $INSTALL_DIR already exists. Updating and switching to branch $BRANCH...${NC}"
     cd "$INSTALL_DIR"
-    git pull
+    git fetch origin
+    git checkout "$BRANCH"
+    git pull origin "$BRANCH"
 else
-    echo -e "${BLUE} Cloning repository to $INSTALL_DIR...${NC}"
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    echo -e "${BLUE} Cloning branch $BRANCH from repository to $INSTALL_DIR...${NC}"
+    git clone -b "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 fi
 
