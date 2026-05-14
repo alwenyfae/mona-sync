@@ -60,24 +60,35 @@ async fn main() {
         )
         .with_state(state);
 
-    // Generate self-signed certificate
-    let subject_alt_names = vec!["localhost".to_string(), server_ip.clone()];
-    let cert = rcgen::generate_simple_self_signed(subject_alt_names)
-        .expect("Failed to generate self-signed certificate");
-
-    let cert_pem = cert.cert.pem();
-    let key_pem = cert.key_pair.serialize_pem();
-
-    let config = RustlsConfig::from_pem(cert_pem.into_bytes(), key_pem.into_bytes())
-        .await
-        .expect("Failed to create RustlsConfig");
+    let use_tls = env::var("USE_TLS").unwrap_or_else(|_| "true".to_string()) == "true";
 
     let addr: SocketAddr = server_address.parse().expect("Invalid server address");
 
-    println!("Server starting on https://{}", server_address);
+    if use_tls {
+        // Generate self-signed certificate
+        let subject_alt_names = vec!["localhost".to_string(), server_ip.clone()];
+        let cert = rcgen::generate_simple_self_signed(subject_alt_names)
+            .expect("Failed to generate self-signed certificate");
 
-    axum_server::bind_rustls(addr, config)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+        let cert_pem = cert.cert.pem();
+        let key_pem = cert.key_pair.serialize_pem();
+
+        let config = RustlsConfig::from_pem(cert_pem.into_bytes(), key_pem.into_bytes())
+            .await
+            .expect("Failed to create RustlsConfig");
+
+        println!("Server starting on https://{}", server_address);
+
+        axum_server::bind_rustls(addr, config)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    } else {
+        println!("Server starting on http://{}", server_address);
+
+        axum_server::bind(addr)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    }
 }
