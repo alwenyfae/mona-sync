@@ -1,11 +1,19 @@
 mod handlers;
 mod models;
 
-use axum::{routing::get, Router};
+use axum::routing::{get, post};
+use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
 use std::net::SocketAddr;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub pool: sqlx::SqlitePool,
+    pub jwt_secret: String,
+    pub api_password: String,
+}
 
 #[tokio::main]
 async fn main() {
@@ -16,14 +24,24 @@ async fn main() {
     let server_port = env::var("SERVER_PORT").unwrap_or_else(|_| "3000".to_string());
     let server_address = format!("{}:{}", server_ip, server_port);
 
+    let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let api_password = env::var("API_PASSWORD").expect("API_PASSWORD must be set");
+
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await
         .unwrap();
 
+    let state = AppState {
+        pool,
+        jwt_secret,
+        api_password,
+    };
+
     let app = Router::new()
         .route("/health", get(|| async { "Sync API is alive!" }))
+        .route("/api/auth/login", post(handlers::login))
         .route(
             "/api/sync/supply_items",
             get(handlers::pull_supply_items).post(handlers::push_supply_items),
@@ -40,7 +58,7 @@ async fn main() {
             "/api/sync/blood_tests",
             get(handlers::pull_blood_tests).post(handlers::push_blood_tests),
         )
-        .with_state(pool);
+        .with_state(state);
 
     // Generate self-signed certificate
     let subject_alt_names = vec!["localhost".to_string(), server_ip.clone()];
