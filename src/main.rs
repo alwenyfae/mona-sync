@@ -1,9 +1,11 @@
 mod handlers;
 mod models;
 
-use axum::{Router, response::Html, routing::get};
+use axum::{routing::get, Router};
+use axum_server::tls_rustls::RustlsConfig;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
@@ -40,9 +42,24 @@ async fn main() {
         )
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind(&server_address)
+    // Generate self-signed certificate
+    let subject_alt_names = vec!["localhost".to_string(), server_ip.clone()];
+    let cert = rcgen::generate_simple_self_signed(subject_alt_names)
+        .expect("Failed to generate self-signed certificate");
+
+    let cert_pem = cert.cert.pem();
+    let key_pem = cert.key_pair.serialize_pem();
+
+    let config = RustlsConfig::from_pem(cert_pem.into_bytes(), key_pem.into_bytes())
+        .await
+        .expect("Failed to create RustlsConfig");
+
+    let addr: SocketAddr = server_address.parse().expect("Invalid server address");
+
+    println!("🚀 Server starting on https://{}", server_address);
+
+    axum_server::bind_rustls(addr, config)
+        .serve(app.into_make_service())
         .await
         .unwrap();
-    println!("🚀 Server starting on http://{}", server_address);
-    axum::serve(listener, app).await.unwrap();
 }
