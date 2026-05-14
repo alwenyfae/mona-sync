@@ -102,7 +102,7 @@ if [ ! -f ".env" ]; then
     RANDOM_JWT=$(openssl rand -base64 32 2>/dev/null || head -c 32 /dev/urandom | base64)
 
     echo -n -e " Enter a password for API sync (press Enter for a random one): "
-    read -r USER_PWD
+    read -r USER_PWD < /dev/tty
     if [ -z "$USER_PWD" ]; then
         USER_PWD=$(openssl rand -base64 12 2>/dev/null || head -c 12 /dev/urandom | base64)
         echo -e "${GREEN} Generated random password: $USER_PWD${NC}"
@@ -167,5 +167,3 @@ echo -e " Server address: ${GREEN}https://$PUBLIC_IP:$DEFAULT_PORT${NC}"
 echo -e " Health check: ${GREEN}https://$PUBLIC_IP:$DEFAULT_PORT/health${NC}"
 echo -e " API Password: ${GREEN}$API_PWD${NC} (Use this to login and get a JWT)"
 echo -e ""
-echo -e "${RED}⚠️  Note: You are using a self-signed certificate.${NC}"
-echo -e " Your browser or API client will show a warning; this is normal."
