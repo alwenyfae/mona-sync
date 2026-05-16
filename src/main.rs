@@ -33,6 +33,11 @@ async fn main() {
         .await
         .unwrap();
 
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
+
     let state = AppState {
         pool,
         jwt_secret,
@@ -57,6 +62,10 @@ async fn main() {
         .route(
             "/api/sync/blood_tests",
             get(handlers::pull_blood_tests).post(handlers::push_blood_tests),
+        )
+        .route(
+            "/api/sync/vault",
+            get(handlers::get_vault).post(handlers::update_vault),
         )
         .with_state(state);
 
