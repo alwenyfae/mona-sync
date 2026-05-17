@@ -3,6 +3,8 @@ mod models;
 
 use axum::Router;
 use axum::routing::{get, post};
+use axum_governor::extractor::PeerIp;
+use axum_governor::{GovernorConfigBuilder, GovernorLayer, Quota, nz};
 use axum_server::tls_rustls::RustlsConfig;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::env;
@@ -44,8 +46,16 @@ async fn main() {
         api_password,
     };
 
+    let governor_conf = GovernorConfigBuilder::default()
+        .quota_default(Quota::requests_per_second(nz!(5u32)))
+        .with_extractor(PeerIp::default())
+        .expect_connect_info()
+        .finish()
+        .unwrap();
+
     let app = Router::new()
         .route("/health", get(|| async { "Sync API is alive!" }))
+        .route("/dev/schema", get(handlers::dev_schema))
         .route("/api/auth/login", post(handlers::login))
         .route(
             "/api/sync/supply_items",
@@ -67,6 +77,7 @@ async fn main() {
             "/api/sync/vault",
             get(handlers::get_vault).post(handlers::update_vault),
         )
+        .layer(GovernorLayer::new(governor_conf))
         .with_state(state);
 
     let use_tls = env::var("USE_TLS").unwrap_or_else(|_| "true".to_string()) == "true";
@@ -89,14 +100,14 @@ async fn main() {
         println!("Server starting on https://{}", server_address);
 
         axum_server::bind_rustls(addr, config)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
     } else {
         println!("Server starting on http://{}", server_address);
 
         axum_server::bind(addr)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
     }

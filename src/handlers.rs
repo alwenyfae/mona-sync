@@ -1,7 +1,8 @@
 use axum::{
-    Json, async_trait,
+    Json,
     extract::{FromRequestParts, Query, State},
     http::{StatusCode, header, request::Parts},
+    response::Html,
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,7 +10,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::AppState;
 use crate::models::{AuthPayload, AuthResponse, Claims, EncryptedSyncItem, SyncQuery, VaultItem};
 
-#[async_trait]
 impl FromRequestParts<AppState> for Claims {
     type Rejection = StatusCode;
 
@@ -105,6 +105,7 @@ pub async fn push_items(
     Ok(())
 }
 
+// Wrapper handlers for specific routes to maintain API compatibility
 pub async fn pull_supply_items(
     State(state): State<AppState>,
     _claims: Claims,
@@ -206,4 +207,68 @@ pub async fn update_vault(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json("OK"))
+}
+
+pub async fn dev_schema(State(state): State<AppState>) -> Html<String> {
+    use sqlx::{Column, Row};
+
+    let tables: Vec<(String,)> = sqlx::query_as("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx_migrations'")
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+
+    let mut html = String::from("<!DOCTYPE html><html><head><title>DB Explorer</title><style>
+        body { font-family: sans-serif; margin: 2em; background: #f4f4f9; }
+        .table-container { background: white; padding: 1em; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 2em; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 12px 8px; text-align: left; }
+        th { background: #007bff; color: white; position: sticky; top: 0; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        tr:hover { background: #f1f1f1; }
+        h2 { color: #333; margin-top: 0; }
+        .empty { color: #888; font-style: italic; }
+    </style></head><body><h1>Database Data Explorer</h1>");
+
+    for (table_name,) in tables {
+        html.push_str(&format!(
+            "<div class='table-container'><h2>Table: {}</h2>",
+            table_name
+        ));
+
+        let rows = sqlx::query(&format!("SELECT * FROM {} LIMIT 100", table_name))
+            .fetch_all(&state.pool)
+            .await
+            .unwrap_or_default();
+
+        if rows.is_empty() {
+            html.push_str("<p class='empty'>No rows found in this table.</p>");
+        } else {
+            html.push_str("<table><thead><tr>");
+
+            let columns = rows[0].columns();
+            for col in columns {
+                html.push_str(&format!("<th>{}</th>", col.name()));
+            }
+            html.push_str("</tr></thead><tbody>");
+
+            for row in rows {
+                html.push_str("<tr>");
+                for i in 0..row.columns().len() {
+                    let value: String = row
+                        .try_get::<String, _>(i)
+                        .or_else(|_| row.try_get::<i64, _>(i).map(|v| v.to_string()))
+                        .or_else(|_| row.try_get::<bool, _>(i).map(|v| v.to_string()))
+                        .unwrap_or_else(|_| "<i>binary/null</i>".to_string());
+
+                    html.push_str(&format!("<td>{}</td>", value));
+                }
+                html.push_str("</tr>");
+            }
+            html.push_str("</tbody></table>");
+        }
+        html.push_str("</div>");
+    }
+
+    html.push_str("</body></html>");
+    Html(html)
 }
